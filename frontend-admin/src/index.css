@@ -1,0 +1,68 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Admin portal uses a warm dark tone — distinct from blue customer portal */
+  --bg: #0d0e11;
+  --bg-card: #13151a;
+  --bg-input: #1a1d24;
+  --bg-sidebar: #111318;
+  --border: #222530;
+  --border-focus: #e8a020;
+  --accent: #e8a020;
+  --accent-hover: #d4901a;
+  --accent-glow: rgba(232, 160, 32, 0.2);
+  --accent-2: #e85c20;          /* Admin-specific red-orange */
+  --admin-color: #e85c20;
+  --support-color: #20b8e8;
+  --text-primary: #eeeef2;
+  --text-secondary: #7a7f9a;
+  --text-muted: #3d4260;
+  --success: #2dd4a0;
+  --error: #e85c5c;
+  --error-bg: rgba(232, 92, 92, 0.1);
+  --warning: #e8a020;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.5);
+  --font: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font);
+  background-color: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+input {
+  font-family: var(--font);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
