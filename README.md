@@ -56,3 +56,26 @@ ticket_support_system/
 └── README.md
 
 ```
+
+steps
+
+->Backend setup
+
+- cd auth-system/backend
+- python -m venv venv
+- source venv/bin/activate
+- pip install -r requirements.txt
+- python scripts/input_data.py
+- uvicorn app.main:app --reload
+
+->Customer Frontend
+
+- cd auth-system/frontend-customer
+- npm install
+- npm run dev
+
+->admin Frontend
+
+- cd auth-system/frontend-admin
+- npm install
+- npm run dev

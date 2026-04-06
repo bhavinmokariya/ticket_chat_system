@@ -11,6 +11,9 @@ myenv/
 # Environment variables
 .env
 
+# Node.js
+node_modules/
+
 # OS files
 .DS_Store
 
