@@ -6,7 +6,7 @@ from bson import ObjectId
 from ticket_chat_system.app.config.db import tickets_collection, support_collection
 from ticket_chat_system.app.constants.ticket_status import TicketStatus, SUBJECT_PRIORITY_MAP, PREDEFINED_SUBJECTS
 from ticket_chat_system.app.constants.roles import Role
-from ticket_chat_system.app.utils.id_generator import generate_ticket_id, generate_ticket_number
+from ticket_chat_system.app.utils.id_generator import generate_ticket_id, generate_ticket_number,gen_ticket
 
 
 # ─────────────────────────────────────────────
@@ -24,9 +24,9 @@ def serialize_ticket(ticket: dict) -> dict:
     return ticket
 
 
-# ─────────────────────────────────────────────
+# ────────────────────────────────────────────
 # Create Ticket
-# ─────────────────────────────────────────────
+# ────────────────────────────────────────────
 
 async def create_ticket(customer_id: int, subject: str, description: str) -> dict:
     """
@@ -40,15 +40,16 @@ async def create_ticket(customer_id: int, subject: str, description: str) -> dic
         )
 
     priority = SUBJECT_PRIORITY_MAP[subject]
-    ticket_id = await generate_ticket_id()
-    ticket_number = generate_ticket_number(ticket_id)
+    # ticket_id = await generate_ticket_id()
+    # ticket_number = generate_ticket_number(ticket_id)
+    ticket_id,ticket_number=gen_ticket()
     now = utcnow()
 
     ticket_doc = {
         "ticket_id": ticket_id,
         "ticket_number": ticket_number,
         "customer_id": customer_id,
-        "assigned_engineer_id": None,
+        "assigned_engineer_id": None,   
         "status": TicketStatus.OPEN,
         "priority": priority,
         "subject": subject,
