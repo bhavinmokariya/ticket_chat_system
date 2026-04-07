@@ -1,4 +1,4 @@
 class Role:
     ADMIN = "admin"
     CUSTOMER = "customer"
-    SUPPORT = "support_engineer"
+    SUPPORT = "support"          # Auth module uses "support" (not "support_engineer")
