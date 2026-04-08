@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Support Dashboard — Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2129;
+    --border: #2a3140;
+    --accent: #f0883e;
+    --accent-glow: rgba(240,136,62,0.15);
+    --accent-soft: #f8ae74;
+    --text: #e6edf3;
+    --text-muted: #7d8590;
+    --text-dim: #3d4450;
+    --bubble-self: #f0883e;
+    --bubble-other: #1c2129;
+    --online: #3ecf8e;
+    --radius: 18px;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+    --sidebar: 260px;
+  }
+
+  html, body { height: 100%; background: var(--bg); font-family: var(--font); color: var(--text); overflow: hidden; }
+
+  /* ── Shell ── */
+  .shell {
+    height: 100vh;
+    display: grid;
+    grid-template-columns: var(--sidebar) 1fr;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 20px 18px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agent-identity {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .agent-avatar {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #7c3d15, #f0883e);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .agent-name { font-size: 14px; font-weight: 600; }
+  .agent-role {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--accent-soft);
+    background: var(--accent-glow);
+    border: 1px solid rgba(240,136,62,0.3);
+    padding: 2px 7px;
+    border-radius: 20px;
+    letter-spacing: 0.4px;
+    display: inline-block;
+    margin-top: 2px;
+  }
+
+  /* Connect form in sidebar */
+  .connect-form { display: flex; flex-direction: column; gap: 6px; }
+  .connect-form label { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .connect-form input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .connect-form input:focus { border-color: var(--accent); }
+  .btn-connect {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    font-family: var(--font);
+    transition: opacity 0.2s;
+    margin-top: 2px;
+  }
+  .btn-connect:hover { opacity: 0.85; }
+  .btn-connect:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Active ticket card */
+  .sidebar-section { padding: 14px 18px; }
+  .section-title {
+    font-size: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .ticket-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: none;
+  }
+  .ticket-card.visible { display: block; }
+  .ticket-card-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-soft);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .ticket-card-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted);
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--online);
+    box-shadow: 0 0 5px var(--online);
+  }
+
+  /* Quick canned responses */
+  .canned-list { display: flex; flex-direction: column; gap: 6px; }
+  .canned-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font);
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .canned-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-soft);
+    background: var(--accent-glow);
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  /* ── Main chat area ── */
+  .chat-area {
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+    overflow: hidden;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a3a4a, #3ecf8e44);
+    border: 1px solid #3ecf8e44;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .header-info { flex: 1; }
+  .header-name { font-weight: 600; font-size: 15px; letter-spacing: -0.2px; }
+  .header-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+  .conn-indicator {
+    width: 8px; height: 8px; border-radius: 50%; background: #555; transition: background 0.3s; flex-shrink: 0;
+  }
+  .conn-indicator.online { background: var(--online); box-shadow: 0 0 6px var(--online); }
+  .conn-indicator.offline { background: #e06c75; }
+
+  /* Messages */
+  #messages {
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--bg);
+  }
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .date-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 16px 0 8px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .date-divider::before, .date-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .msg-row {
+    display: flex; align-items: flex-end; gap: 8px;
+    animation: fadeUp 0.2s ease;
+  }
+  .msg-row.self { flex-direction: row-reverse; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0; margin-bottom: 2px;
+  }
+  .msg-avatar.support-av { background: linear-gradient(135deg, #7c3d15, #f0883e66); }
+  .msg-avatar.customer-av { background: linear-gradient(135deg, #1a3a4a, #3ecf8e44); border: 1px solid #3ecf8e44; }
+
+  .bubble {
+    max-width: 68%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: break-word;
+  }
+  .msg-row.self .bubble {
+    background: var(--bubble-self);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-row.other .bubble {
+    background: var(--bubble-other);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .bubble .sender-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.6px;
+    text-transform: uppercase; margin-bottom: 4px; opacity: 0.7;
+  }
+  .msg-row.self .sender-label { color: rgba(255,255,255,0.7); }
+  .msg-row.other .sender-label { color: #3ecf8eaa; }
+  .bubble .ts { font-size: 10px; margin-top: 5px; opacity: 0.5; font-family: var(--mono); text-align: right; }
+
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; color: var(--text-muted); padding: 40px;
+  }
+  .empty-state .icon { font-size: 36px; opacity: 0.4; }
+  .empty-state p { font-size: 14px; text-align: center; max-width: 260px; line-height: 1.6; }
+
+  #typing-indicator {
+    padding: 0 20px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    min-height: 24px;
+  }
+
+  /* Input */
+  .input-area {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+  }
+  .compose-row { display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    padding: 12px 16px;
+    resize: none;
+    outline: none;
+    height: 46px;
+    min-height: 46px;
+    max-height: 120px;
+    transition: border-color 0.2s;
+    line-height: 1.5;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-dim); }
+  .btn-send {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    background: var(--accent);
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.2s, transform 0.1s; flex-shrink: 0;
+  }
+  .btn-send:hover { opacity: 0.85; }
+  .btn-send:active { transform: scale(0.93); }
+  .btn-send:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-send svg { width: 18px; height: 18px; fill: white; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="agent-identity">
+        <div class="agent-avatar">🎧</div>
+        <div>
+          <div class="agent-name">Agent Dashboard</div>
+          <span class="agent-role">SUPPORT</span>
+        </div>
+      </div>
+
+      <div class="connect-form">
+        <label>Ticket ID</label>
+        <input type="number" id="ticket-id-input" placeholder="e.g. 1001" min="1"/>
+        <button class="btn-connect" id="btn-connect" onclick="connectWS()">Connect to Ticket</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-title">Active Ticket</div>
+      <div class="ticket-card" id="ticket-card">
+        <div class="ticket-card-id" id="ticket-card-id">—</div>
+        <div class="ticket-card-status">
+          <span class="status-dot"></span>
+          <span>Live session</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-title">Quick Replies</div>
+      <div class="canned-list">
+        <button class="canned-btn" onclick="insertCanned('Hello! How can I assist you today?')">👋 Greeting</button>
+        <button class="canned-btn" onclick="insertCanned('Let me look into that for you right away.')">🔍 Looking into it</button>
+        <button class="canned-btn" onclick="insertCanned('Could you please provide more details?')">📋 Need more info</button>
+        <button class="canned-btn" onclick="insertCanned('Your issue has been resolved. Is there anything else I can help with?')">✅ Resolved</button>
+        <button class="canned-btn" onclick="insertCanned('I am escalating this to our technical team. You will hear back within 24 hours.')">⬆️ Escalate</button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      WS: <span id="ws-status-text">Disconnected</span>
+    </div>
+  </aside>
+
+  <!-- ── Chat Area ── -->
+  <div class="chat-area">
+    <header>
+      <div class="avatar">👤</div>
+      <div class="header-info">
+        <div class="header-name">Customer</div>
+        <div class="header-sub" id="header-sub">Connect to a ticket to begin</div>
+      </div>
+      <span class="conn-indicator" id="conn-dot"></span>
+    </header>
+
+    <div id="messages">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">🎫</div>
+        <p>Enter a ticket ID in the sidebar and connect to view the customer conversation.</p>
+      </div>
+    </div>
+
+    <div id="typing-indicator"></div>
+
+    <div class="input-area">
+      <div class="compose-row">
+        <textarea id="msg-input" placeholder="Type your reply…" disabled onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="btn-send" id="btn-send" disabled onclick="sendMessage()">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────
+  const WS_BASE     = "ws://localhost:8000/ws";
+  const SENDER_ID   = 99;              // support agent user ID
+  const SENDER_TYPE = "support";
+  const SENDER_LABEL = "You";
+  let messageCounter = Date.now();
+
+  // ── State ────────────────────────────────────────────────────────
+  let ws = null;
+  let ticketId = null;
+
+  // ── DOM refs ─────────────────────────────────────────────────────
+  const messagesEl   = document.getElementById("messages");
+  const msgInput     = document.getElementById("msg-input");
+  const btnSend      = document.getElementById("btn-send");
+  const btnConnect   = document.getElementById("btn-connect");
+  const connDot      = document.getElementById("conn-dot");
+  const headerSub    = document.getElementById("header-sub");
+  const ticketInput  = document.getElementById("ticket-id-input");
+  const ticketCard   = document.getElementById("ticket-card");
+  const ticketCardId = document.getElementById("ticket-card-id");
+  const wsStatusText = document.getElementById("ws-status-text");
+
+  // ── WebSocket ────────────────────────────────────────────────────
+  function connectWS() {
+    const val = parseInt(ticketInput.value.trim());
+    if (!val) { alert("Please enter a valid Ticket ID."); return; }
+    if (ws) ws.close();
+
+    ticketId = val;
+    headerSub.textContent = "Connecting to ticket #" + ticketId + "…";
+    btnConnect.disabled = true;
+    wsStatusText.textContent = "Connecting…";
+
+    ws = new WebSocket(`${WS_BASE}/${ticketId}`);
+
+    ws.onopen = () => {
+      setConnected(true);
+      headerSub.textContent = "ticket #" + ticketId + " · live";
+      ticketCardId.textContent = "Ticket #" + ticketId;
+      ticketCard.classList.add("visible");
+      btnConnect.textContent = "Reconnect";
+      btnConnect.disabled = false;
+      msgInput.disabled = false;
+      btnSend.disabled = false;
+      wsStatusText.textContent = "Connected #" + ticketId;
+      msgInput.focus();
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "history") {
+        renderHistory(data.messages);
+      } else if (data.type === "message") {
+        appendMessage(data.message);
+      }
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      headerSub.textContent = "Disconnected — click Reconnect";
+      msgInput.disabled = true;
+      btnSend.disabled = true;
+      btnConnect.disabled = false;
+      btnConnect.textContent = "Reconnect";
+      wsStatusText.textContent = "Disconnected";
+    };
+
+    ws.onerror = () => {
+      headerSub.textContent = "Connection error";
+      btnConnect.disabled = false;
+      wsStatusText.textContent = "Error";
+    };
+  }
+
+  function setConnected(on) {
+    connDot.className = "conn-indicator " + (on ? "online" : "offline");
+  }
+
+  // ── Render history ───────────────────────────────────────────────
+  function renderHistory(messages) {
+    messagesEl.innerHTML = "";
+    if (!messages || messages.length === 0) {
+      const es = document.createElement("div");
+      es.className = "empty-state";
+      es.innerHTML = '<div class="icon">✨</div><p>No messages yet. The customer hasn\'t written anything.</p>';
+      messagesEl.appendChild(es);
+      return;
+    }
+    addDivider("Previous conversation");
+    messages.forEach(m => appendMessage(m, false));
+    addDivider("Today");
+    scrollBottom();
+  }
+
+  // ── Append message ───────────────────────────────────────────────
+  function appendMessage(msg, scroll = true) {
+    const es = messagesEl.querySelector(".empty-state");
+    if (es) es.remove();
+
+    const isSelf = (msg.sender_type === SENDER_TYPE);  // support agent sent this
+    const row = document.createElement("div");
+    row.className = "msg-row " + (isSelf ? "self" : "other");
+
+    const avDiv = document.createElement("div");
+    avDiv.className = "msg-avatar " + (isSelf ? "support-av" : "customer-av");
+    avDiv.textContent = isSelf ? "🎧" : "👤";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    const label = document.createElement("div");
+    label.className = "sender-label";
+    label.textContent = isSelf ? SENDER_LABEL : "Customer";
+
+    const text = document.createElement("div");
+    text.textContent = msg.message;
+
+    const ts = document.createElement("div");
+    ts.className = "ts";
+    ts.textContent = formatTime(msg.timestamp);
+
+    bubble.appendChild(label);
+    bubble.appendChild(text);
+    bubble.appendChild(ts);
+
+    if (isSelf) {
+      row.appendChild(bubble);
+      row.appendChild(avDiv);
+    } else {
+      row.appendChild(avDiv);
+      row.appendChild(bubble);
+    }
+
+    messagesEl.appendChild(row);
+    if (scroll) scrollBottom();
+  }
+
+  // ── Divider ──────────────────────────────────────────────────────
+  function addDivider(label) {
+    const d = document.createElement("div");
+    d.className = "date-divider";
+    d.textContent = label;
+    messagesEl.appendChild(d);
+  }
+
+  // ── Send ─────────────────────────────────────────────────────────
+  function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+      message_id: ++messageCounter,
+      sender_id: SENDER_ID,
+      sender_type: SENDER_TYPE,
+      message: text,
+      message_type: "text",
+      file_url: ""
+    };
+
+    ws.send(JSON.stringify(payload));
+    msgInput.value = "";
+    msgInput.style.height = "46px";
+    msgInput.focus();
+  }
+
+  function insertCanned(text) {
+    msgInput.value = text;
+    msgInput.focus();
+    autoResize(msgInput);
+  }
+
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  function autoResize(el) {
+    el.style.height = "46px";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+
+  function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+  function formatTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    if (isNaN(d)) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+</script>
+</body>
+</html>

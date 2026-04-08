@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Support Chat — Customer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f13;
+    --surface: #17171e;
+    --surface2: #1e1e28;
+    --border: #2a2a38;
+    --accent: #7c6ff7;
+    --accent-glow: rgba(124,111,247,0.18);
+    --accent-soft: #a99ff9;
+    --text: #e8e8f0;
+    --text-muted: #7a7a95;
+    --text-dim: #4a4a62;
+    --bubble-self: #7c6ff7;
+    --bubble-other: #1e1e28;
+    --online: #3ecf8e;
+    --radius: 18px;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  html, body { height: 100%; background: var(--bg); font-family: var(--font); color: var(--text); overflow: hidden; }
+
+  /* ── Layout ── */
+  .shell {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    max-width: 800px;
+    margin: 0 auto;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    backdrop-filter: blur(12px);
+  }
+
+  .avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .avatar-support { background: linear-gradient(135deg, #3a3560, #6b5fcf); }
+  .avatar-dot {
+    position: absolute; bottom: 1px; right: 1px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--online);
+    border: 2px solid var(--surface);
+  }
+
+  .header-info { flex: 1; }
+  .header-name { font-weight: 600; font-size: 15px; letter-spacing: -0.2px; }
+  .header-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+
+  .ticket-badge {
+    background: var(--accent-glow);
+    border: 1px solid var(--accent);
+    color: var(--accent-soft);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .conn-indicator {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #666;
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+  .conn-indicator.online { background: var(--online); box-shadow: 0 0 6px var(--online); }
+  .conn-indicator.offline { background: #e06c75; }
+
+  /* ── Messages ── */
+  #messages {
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--bg);
+  }
+
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* Date divider */
+  .date-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 16px 0 8px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .date-divider::before, .date-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* Row */
+  .msg-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    animation: fadeUp 0.2s ease;
+  }
+  .msg-row.self { flex-direction: row-reverse; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+  }
+  .msg-avatar.support-av { background: linear-gradient(135deg, #3a3560, #6b5fcf); }
+  .msg-avatar.customer-av { background: linear-gradient(135deg, #1a4a3a, #3ecf8e44); border: 1px solid #3ecf8e55; }
+
+  /* Bubble */
+  .bubble {
+    max-width: 68%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.55;
+    position: relative;
+    word-break: break-word;
+  }
+
+  .msg-row.self .bubble {
+    background: var(--bubble-self);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-row.other .bubble {
+    background: var(--bubble-other);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble .sender-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    opacity: 0.7;
+  }
+  .msg-row.self .sender-label { color: rgba(255,255,255,0.7); }
+  .msg-row.other .sender-label { color: var(--accent-soft); }
+
+  .bubble .ts {
+    font-size: 10px;
+    margin-top: 5px;
+    opacity: 0.5;
+    font-family: var(--mono);
+    text-align: right;
+  }
+
+  /* System message */
+  .sys-msg {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 0;
+    font-family: var(--mono);
+  }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text-muted);
+    padding: 40px;
+  }
+  .empty-state .icon { font-size: 36px; opacity: 0.4; }
+  .empty-state p { font-size: 14px; text-align: center; max-width: 240px; line-height: 1.6; }
+
+  /* Typing indicator */
+  #typing-indicator {
+    padding: 0 20px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    min-height: 24px;
+    transition: opacity 0.2s;
+  }
+
+  /* ── Input ── */
+  .input-area {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+  }
+
+  /* Ticket ID row */
+  .ticket-row {
+    display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+  }
+  .ticket-row label { font-size: 12px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+  .ticket-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .ticket-row input:focus { border-color: var(--accent); }
+  .btn-connect {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    font-family: var(--font);
+    white-space: nowrap;
+  }
+  .btn-connect:hover { opacity: 0.85; }
+  .btn-connect:active { transform: scale(0.97); }
+  .btn-connect:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Message compose row */
+  .compose-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    padding: 12px 16px;
+    resize: none;
+    outline: none;
+    height: 46px;
+    min-height: 46px;
+    max-height: 120px;
+    transition: border-color 0.2s, height 0.1s;
+    line-height: 1.5;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-dim); }
+
+  .btn-send {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.2s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .btn-send:hover { opacity: 0.85; }
+  .btn-send:active { transform: scale(0.93); }
+  .btn-send:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-send svg { width: 18px; height: 18px; fill: white; }
+
+  /* Role tag in header */
+  .role-tag {
+    background: #1a3a2a;
+    border: 1px solid #3ecf8e55;
+    color: #3ecf8e;
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 3px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="avatar avatar-support">
+      🎧
+      <span class="avatar-dot"></span>
+    </div>
+    <div class="header-info">
+      <div class="header-name">Support Team</div>
+      <div class="header-sub" id="header-sub">Not connected</div>
+    </div>
+    <span class="role-tag">Customer</span>
+    <span class="ticket-badge" id="ticket-label">—</span>
+    <span class="conn-indicator" id="conn-dot"></span>
+  </header>
+
+  <!-- Messages -->
+  <div id="messages">
+    <div class="empty-state" id="empty-state">
+      <div class="icon">💬</div>
+      <p>Enter your ticket ID below and connect to start chatting with support.</p>
+    </div>
+  </div>
+
+  <!-- Typing indicator -->
+  <div id="typing-indicator"></div>
+
+  <!-- Input area -->
+  <div class="input-area">
+    <div class="ticket-row">
+      <label>Ticket ID</label>
+      <input type="number" id="ticket-id-input" placeholder="e.g. 1001" min="1"/>
+      <button class="btn-connect" id="btn-connect" onclick="connectWS()">Connect</button>
+    </div>
+    <div class="compose-row">
+      <textarea id="msg-input" placeholder="Type your message…" disabled onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="btn-send" id="btn-send" disabled onclick="sendMessage()">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────
+  const WS_BASE   = "ws://localhost:8000/ws";
+  const SENDER_ID  = 1;                 // customer user ID
+  const SENDER_TYPE = "customer";
+  const SENDER_LABEL = "You";
+  let messageCounter = Date.now();
+
+  // ── State ────────────────────────────────────────────────────────
+  let ws = null;
+  let ticketId = null;
+  let connected = false;
+
+  // ── DOM refs ─────────────────────────────────────────────────────
+  const messagesEl   = document.getElementById("messages");
+  const emptyState   = document.getElementById("empty-state");
+  const msgInput     = document.getElementById("msg-input");
+  const btnSend      = document.getElementById("btn-send");
+  const btnConnect   = document.getElementById("btn-connect");
+  const connDot      = document.getElementById("conn-dot");
+  const headerSub    = document.getElementById("header-sub");
+  const ticketLabel  = document.getElementById("ticket-label");
+  const typingEl     = document.getElementById("typing-indicator");
+  const ticketInput  = document.getElementById("ticket-id-input");
+
+  // ── WebSocket ────────────────────────────────────────────────────
+  function connectWS() {
+    const val = parseInt(ticketInput.value.trim());
+    if (!val) { alert("Please enter a valid Ticket ID."); return; }
+    if (ws) { ws.close(); }
+
+    ticketId = val;
+    ticketLabel.textContent = "#" + val;
+    headerSub.textContent = "Connecting…";
+    btnConnect.disabled = true;
+
+    ws = new WebSocket(`${WS_BASE}/${ticketId}`);
+
+    ws.onopen = () => {
+      connected = true;
+      setConnected(true);
+      headerSub.textContent = "ticket #" + ticketId + " · connected";
+      btnConnect.textContent = "Reconnect";
+      btnConnect.disabled = false;
+      msgInput.disabled = false;
+      btnSend.disabled = false;
+      msgInput.focus();
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "history") {
+        renderHistory(data.messages);
+      } else if (data.type === "message") {
+        appendMessage(data.message);
+      }
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      setConnected(false);
+      headerSub.textContent = "Disconnected — click Reconnect";
+      msgInput.disabled = true;
+      btnSend.disabled = true;
+      btnConnect.disabled = false;
+      btnConnect.textContent = "Reconnect";
+    };
+
+    ws.onerror = () => {
+      headerSub.textContent = "Connection error";
+      btnConnect.disabled = false;
+    };
+  }
+
+  function setConnected(on) {
+    connDot.className = "conn-indicator " + (on ? "online" : "offline");
+  }
+
+  // ── Render history ───────────────────────────────────────────────
+  function renderHistory(messages) {
+    // Clear everything except empty state (which we'll hide)
+    messagesEl.innerHTML = "";
+
+    if (!messages || messages.length === 0) {
+      const es = document.createElement("div");
+      es.className = "empty-state";
+      es.innerHTML = '<div class="icon">✨</div><p>No messages yet. Say hello!</p>';
+      messagesEl.appendChild(es);
+      return;
+    }
+
+    addDivider("Previous conversation");
+    messages.forEach(m => appendMessage(m, false));
+    addDivider("Today");
+    scrollBottom();
+  }
+
+  // ── Append a single message ──────────────────────────────────────
+  function appendMessage(msg, scroll = true) {
+    // Remove empty state if present
+    const es = messagesEl.querySelector(".empty-state");
+    if (es) es.remove();
+
+    const isSelf = (msg.sender_type === SENDER_TYPE);
+    const row = document.createElement("div");
+    row.className = "msg-row " + (isSelf ? "self" : "other");
+
+    const avDiv = document.createElement("div");
+    avDiv.className = "msg-avatar " + (isSelf ? "customer-av" : "support-av");
+    avDiv.textContent = isSelf ? "👤" : "🎧";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    const label = document.createElement("div");
+    label.className = "sender-label";
+    label.textContent = isSelf ? SENDER_LABEL : "Support";
+
+    const text = document.createElement("div");
+    text.textContent = msg.message;
+
+    const ts = document.createElement("div");
+    ts.className = "ts";
+    ts.textContent = formatTime(msg.timestamp);
+
+    bubble.appendChild(label);
+    bubble.appendChild(text);
+    bubble.appendChild(ts);
+
+    if (isSelf) {
+      row.appendChild(bubble);
+      row.appendChild(avDiv);
+    } else {
+      row.appendChild(avDiv);
+      row.appendChild(bubble);
+    }
+
+    messagesEl.appendChild(row);
+    if (scroll) scrollBottom();
+  }
+
+  // ── Divider ──────────────────────────────────────────────────────
+  function addDivider(label) {
+    const d = document.createElement("div");
+    d.className = "date-divider";
+    d.textContent = label;
+    messagesEl.appendChild(d);
+  }
+
+  // ── Send ─────────────────────────────────────────────────────────
+  function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+      message_id: ++messageCounter,
+      sender_id: SENDER_ID,
+      sender_type: SENDER_TYPE,
+      message: text,
+      message_type: "text",
+      file_url: ""
+    };
+
+    ws.send(JSON.stringify(payload));
+    msgInput.value = "";
+    msgInput.style.height = "46px";
+    msgInput.focus();
+  }
+
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = "46px";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function formatTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    if (isNaN(d)) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+</script>
+</body>
+</html>
