@@ -1,8 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 
 from app.config.db import get_database
 from app.constants.ticket_status import TicketStatus, SUBJECT_PRIORITY_MAP, PREDEFINED_SUBJECTS
