@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     CUSTOMER_BACKEND_URL: str = "http://localhost:8000"
     # PRODUCTION: use ALLOWED_ORIGINS env var (comma-separated)
     # ALLOWED_ORIGINS: str = "https://your-admin.vercel.app"
+    REDIS_URL: str = "redis://localhost:6379/1"
 
     class Config:
         env_file = ".env"

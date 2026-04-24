@@ -1,19 +1,28 @@
+"""
+WebSocket routes — admin-support backend
+=========================================
+  /ws/{ticket_id}           — real-time chat for support engineers & admins
+  /ws/notifications/live    — real-time ticket-lifecycle notifications
+
+All message delivery (including cross-service to the customer backend) is handled
+via Redis pub/sub inside ChatManager — no polling, no HTTP forwarding.
+"""
 import logging
-import httpx
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
-from app.websocket.manager import ConnectionManager
-from app.websocket.notification_manager import NotificationManager
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.websocket.chat_manager import chat_manager
+from app.websocket.notification_manager import notification_manager
 from app.services.message_service import add_message, get_messages, mark_messages_read
 from app.utils.jwt import decode_token
 from app.config.db import get_database
-from app.config.settings import settings
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["WebSocket"])
 
-manager = ConnectionManager()
-notification_manager = NotificationManager()
+
+# ── Auth helper ───────────────────────────────────────────────────────────────
 
 async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     token = websocket.query_params.get("token")
@@ -31,32 +40,24 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     return payload
 
 
-@router.post("/internal/typing/{ticket_id}")
-async def internal_typing(ticket_id: int, request: Request):
-    """
-    Called by the customer backend to forward a customer's typing event to
-    support engineers connected on this backend's WebSocket.
-    """
-    body = await request.json()
-    sender_type = body.get("sender_type", "customer")
-    is_typing = body.get("is_typing", False)
-    await manager.broadcast_typing(ticket_id, sender_type, is_typing)
-    return {"ok": True}
-
+# ── Chat WebSocket ────────────────────────────────────────────────────────────
 
 @router.websocket("/ws/{ticket_id}")
 async def websocket_chat_endpoint(websocket: WebSocket, ticket_id: int):
     """
-    Real-time chat for a ticket (admin/support side).
+    Real-time chat for a ticket (admin / support side).
 
-    - Only the assigned engineer (or admin) may send messages.
-    - Other engineers connect in read-only / viewer mode.
-    - Feature #6: When a non-assigned engineer joins, notify all connected peers.
-    - Feature #6: When a viewer disconnects, send a viewer_left event.
+    Access levels
+    -------------
+    - Assigned engineer or admin: full read-write
+    - Non-assigned support engineer: read-only (viewer)
+
+    Cross-service delivery
+    ----------------------
+    Messages published to Redis chat:ticket:{id} are automatically received
+    by the customer backend and forwarded to the connected customer — no
+    separate polling or HTTP forwarding required.
     """
-
-    # print(request.base_url())
-    print(websocket.base_url)
     user = await _authenticate_ws(websocket)
     if user is None:
         return
@@ -69,80 +70,67 @@ async def websocket_chat_endpoint(websocket: WebSocket, ticket_id: int):
 
     role = user.get("role")
     user_id = int(user["sub"].split("_")[-1])
-
-    if role == "customer" and ticket["customer_id"] != user_id:
-        await websocket.close(code=4003, reason="Access denied")
-        return
-
-    sender_type = "customer" if user.get("user_type") == "customer" else "support"
+    sender_type = "support"
     sender_name = user.get("name", "")
 
     assigned_engineer_id = ticket.get("assigned_engineer_id")
-    is_assigned = role == "admin" or (sender_type == "support" and assigned_engineer_id == user_id)
+    is_assigned = role == "admin" or assigned_engineer_id == user_id
 
-    await manager.connect(ticket_id, websocket)
+    conn_id = await chat_manager.connect(ticket_id, websocket)
+
+    # Send chat history and access level immediately on connect
     history = await get_messages(ticket_id)
-    await manager.send_history(websocket, history)
-
-    # Tell the connecting client their access level
+    await chat_manager.send_history(websocket, history)
     await websocket.send_json({
         "type": "access_info",
         "read_only": not is_assigned,
         "assigned_engineer_id": assigned_engineer_id,
         "user_id": user_id,
     })
+    await mark_messages_read(ticket_id, "support")
 
-    user_type = "support" if sender_type == "support" else "customer"
-    await mark_messages_read(ticket_id, user_type)
-
-    # Feature #6: If this is a viewer (non-assigned support engineer), announce
-    # their presence to everyone in the ticket room (support side only).
-    # Also notify the viewing engineer themselves so they see the banner.
-    if sender_type == "support" and not is_assigned:
-        viewer_event = {
+    # Announce viewer presence if non-assigned support engineer joins
+    if not is_assigned:
+        await chat_manager.publish_raw(ticket_id, {
             "type": "viewer_joined",
             "viewer_id": user_id,
             "viewer_name": sender_name,
             "ticket_id": ticket_id,
-        }
-        await manager.broadcast(ticket_id, viewer_event)
+        })
 
     try:
         while True:
-            print("this loop in running constantly")
             data = await websocket.receive_json()
             msg_type = data.get("type", "message")
 
             if msg_type == "typing":
-                current_ticket = await db.tickets.find_one({"ticket_id": ticket_id}, {"status": 1})
-                if current_ticket and current_ticket.get("status") == "closed":
+                current = await db.tickets.find_one({"ticket_id": ticket_id}, {"status": 1})
+                if current and current.get("status") == "closed":
                     continue
-                await manager.broadcast_typing(
+                await chat_manager.publish_typing(
                     ticket_id=ticket_id,
                     sender_type=sender_type,
                     is_typing=data.get("is_typing", False),
-                    exclude=websocket,
+                    exclude_conn_id=conn_id,
                 )
-                await _forward_typing_to_customer(ticket_id, sender_type, data.get("is_typing", False))
                 continue
 
-            current_ticket = await db.tickets.find_one(
-                {"ticket_id": ticket_id}, {"status": 1, "assigned_engineer_id": 1}
+            # Reload ticket state before every message
+            current = await db.tickets.find_one(
+                {"ticket_id": ticket_id},
+                {"status": 1, "assigned_engineer_id": 1},
             )
-            current_assigned = current_ticket.get("assigned_engineer_id") if current_ticket else None
+            current_assigned = current.get("assigned_engineer_id") if current else None
 
-            if sender_type == "support" and role != "admin" and current_assigned != user_id:
+            if role != "admin" and current_assigned != user_id:
                 await websocket.send_json({
                     "type": "error",
                     "message": "Only the assigned engineer can send messages. You have read-only access.",
                 })
                 continue
 
-            if current_ticket and current_ticket.get("status") == "closed":
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "This ticket is closed.",
-                })
+            if current and current.get("status") == "closed":
+                await websocket.send_json({"type": "error", "message": "This ticket is closed."})
                 continue
 
             message = {
@@ -153,46 +141,36 @@ async def websocket_chat_endpoint(websocket: WebSocket, ticket_id: int):
                 "message_type": data.get("message_type", "text"),
                 "file_url": data.get("file_url", ""),
                 "timestamp": datetime.now(timezone.utc),
-                "is_read_by_customer": sender_type == "customer",
-                "is_read_by_support": sender_type == "support",
+                "is_read_by_customer": False,
+                "is_read_by_support": True,
             }
             await add_message(ticket_id, message)
-            await manager.broadcast(ticket_id, message)
+            # Redis delivery reaches the customer backend automatically
+            await chat_manager.publish_message(ticket_id, message)
 
     except WebSocketDisconnect:
-        manager.disconnect(ticket_id, websocket)
-        await manager.broadcast_typing(ticket_id, sender_type, False, exclude=None)
-        # Feature #6: If a viewer leaves, let the room know
-        if sender_type == "support" and not is_assigned:
-            viewer_left_event = {
+        chat_manager.disconnect(ticket_id, websocket)
+        # Clear typing indicator on disconnect
+        await chat_manager.publish_typing(ticket_id, sender_type, False)
+        if not is_assigned:
+            await chat_manager.publish_raw(ticket_id, {
                 "type": "viewer_left",
                 "viewer_id": user_id,
                 "viewer_name": sender_name,
                 "ticket_id": ticket_id,
-            }
-            await manager.broadcast(ticket_id, viewer_left_event)
+            })
 
 
-async def _forward_typing_to_customer(ticket_id: int, sender_type: str, is_typing: bool):
-    """Forward support typing event to customer backend's internal endpoint."""
-    customer_url = getattr(settings, "CUSTOMER_BACKEND_URL", "")
-    if not customer_url:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            await client.post(
-                f"{customer_url}/internal/typing/{ticket_id}",
-                json={"sender_type": sender_type, "is_typing": is_typing},
-            )
-    except Exception:
-        pass
-
+# ── Notifications WebSocket ───────────────────────────────────────────────────
 
 @router.websocket("/ws/notifications/live")
 async def websocket_notification_endpoint(websocket: WebSocket):
     """
-    Support engineers receive real-time ticket notifications here.
-    Can send: { "action": "attend", "ticket_id": <int> }
+    Support engineers and admins connect here to receive real-time
+    ticket-lifecycle notifications from the Redis notifications channel.
+
+    Supported incoming actions:
+      { "action": "attend", "ticket_id": <int> }  — claim an open ticket
     """
     user = await _authenticate_ws(websocket)
     if user is None:
